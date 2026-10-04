@@ -8,7 +8,10 @@ cd app && python -m http.server 8123          # in one terminal (TypeLab's app f
 cd typelab-material/tests && npm i playwright # once (or use a global playwright)
 node test-nodes.mjs        # every node output compiles + renders      → nodes-sheet.png
 node test-materials.mjs    # all starter materials build + render       → materials-sheet.png
-node test-ui.mjs           # the workspace driven like a user (13 checks)
+node test-ui.mjs           # the workspace driven like a user (15 checks)
+node test-ui-maps.mjs      # effect maps in the Material tab + FX card + materials as patterns (13 checks)
+node test-effectmaps.mjs   # every effect-map node, map == list pixels, starter maps, live layer, links
+                           #   (ALL_TLFX=1 runs all 313 TypeLab effects as material nodes, ~10 min on SwiftShader)
 ```
 
 Env: `TYPELAB_URL` (default `http://127.0.0.1:8123/index.html`), `SOFTWARE_GL=1` (SwiftShader, no GPU needed),

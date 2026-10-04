@@ -43,14 +43,21 @@
     TL.commit('New material: ' + mat.name);
     G.setMaterial(mat);
     buildTabs();
+    buildLib();
     UI.buildInspector();
     requestAnimationFrame(() => G.fit());
     schedule();
     return mat;
   };
   M.newFromPreset = (id) => { const m = M.fromPreset(id); if (m) addMaterial(m); return m; };
-  M.newEmpty = () => addMaterial(M.newMaterial('Material ' + (M.mats().length + 1)));
-  const switchTo = (id) => { st.matId = id; G.setMaterial(curMat()); buildTabs(); UI.buildInspector(); requestAnimationFrame(() => G.fit()); schedule(); };
+  M.newEmpty = () => addMaterial(M.newMaterial('Material ' + (M.mats('material').length + 1)));
+  M.newEmptyMap = () => addMaterial(M.newEffectMap('Effect map ' + (M.mats('effect').length + 1)));
+  // a starter map; materials it needs are added to the document too (once, without switching to them)
+  M.newMapFromPreset = (id) => {
+    const map = M.fromFxPreset(id, (presetId) => { const m = M.fromPreset(presetId); if (m) TL.doc.materials.push(m); return m; });
+    return map ? addMaterial(map) : null;
+  };
+  const switchTo = (id) => { st.matId = id; G.setMaterial(curMat()); buildTabs(); buildLib(); UI.buildInspector(); requestAnimationFrame(() => G.fit()); schedule(); };
   const removeMaterial = (m) => {
     TL.doc.materials = M.mats().filter((x) => x !== m);
     if (st.matId === m.id) st.matId = null;
@@ -87,8 +94,9 @@
     S.tabs.replaceChildren();
     M.mats().forEach((m) => {
       const name = h('span', { class: 'mt-name' }, m.name);
-      const tab = h('div', { class: 'mat-tab' + (cur === m ? ' on' : ''), title: 'Double-click to rename · right-click for more' }, name,
-        h('button', { class: 'mt-x', title: 'Delete material', onclick: (e) => { e.stopPropagation(); if (confirm('Delete the material "' + m.name + '"?')) removeMaterial(m); } }, '×'));
+      const badge = M.kindOf(m) === 'effect' ? h('span', { class: 'mt-kind', title: 'Effect map' }, 'fx') : null;
+      const tab = h('div', { class: 'mat-tab' + (cur === m ? ' on' : '') + (badge ? ' fx' : ''), title: (badge ? 'Effect map' : 'Material') + ' · double-click to rename · right-click for more' }, badge, name,
+        h('button', { class: 'mt-x', title: 'Delete', onclick: (e) => { e.stopPropagation(); if (confirm('Delete "' + m.name + '"?' + (M.hostsOf && M.hostsOf(m.id).length ? ' Layers using it keep an empty Effect map entry.' : ''))) removeMaterial(m); } }, '×'));
       tab.onclick = () => { if (cur !== m) switchTo(m.id); };
       tab.ondblclick = () => {
         const inp = UI.stopKeys(h('input', { type: 'text', class: 'mt-rename', value: m.name }));
@@ -110,8 +118,10 @@
     const add = h('button', { class: 'mat-addtab', title: 'New material' }, '+');
     add.onclick = () => UI.menu(add, [
       { label: 'Empty material', action: M.newEmpty },
-      { label: 'From the material library…', action: () => { S.view.libTab = 'materials'; saveView(); buildLib(); } },
-      { label: 'From a text layer (embossed)', action: () => M.newFromPreset('embossed-metal-type') },
+      { label: 'Empty effect map', action: M.newEmptyMap },
+      '-',
+      { label: 'Material from the library…', action: () => { S.view.libTab = 'materials'; saveView(); buildLib(); } },
+      { label: 'Effect map from the starters…', action: () => { S.view.libTab = 'maps'; saveView(); buildLib(); } },
     ]);
     const tools = h('div', { class: 'mat-gtools' },
       UI.btn('Add node', () => G.addMenuAtMouse(), 'xs'),
@@ -128,7 +138,10 @@
         h('div', { class: 'row wrap tight' },
           UI.btn('Red bricks', () => M.newFromPreset('red-bricks'), 'accent'), UI.btn('Embossed text', () => M.newFromPreset('embossed-metal-type')),
           UI.btn('Rusty iron', () => M.newFromPreset('rusty-iron')), UI.btn('Oak planks', () => M.newFromPreset('oak-planks')), UI.btn('Empty', M.newEmpty)),
-        UI.note('Or pick one of ' + M.presets.length + ' materials in the library on the left.')));
+        h('b', null, 'Or an effect map'),
+        h('p', null, 'Wire TypeLab’s effects, filters, dither and blends together and use the map on any layer.'),
+        h('div', { class: 'row wrap tight' }, UI.btn('Glow through noise', () => M.newMapFromPreset('map-glow-through-noise')), UI.btn('Dithered shadow', () => M.newMapFromPreset('map-dithered-shadow')), UI.btn('Empty effect map', M.newEmptyMap)),
+        UI.note('The library on the left has ' + M.presets.length + ' materials and ' + M.fxPresets.length + ' starter effect maps.')));
     }
   }
 
@@ -158,13 +171,17 @@
       pumpThumbs();
     }, 16);
   };
+  const libClosed = (() => { try { return new Set(JSON.parse(localStorage.getItem('matLibClosed') || 'null') || ['TypeLab FX', 'Filter Gallery', 'Filter Menu', 'Parametric', 'Craft Lab', 'Textures', 'Effects ·']); } catch (e) { return new Set(); } })();
+  const isClosed = (cat) => Array.from(libClosed).some((p) => cat === p || cat.startsWith(p));
+  const toggleCat = (cat) => { const pre = Array.from(libClosed).find((p) => cat === p || cat.startsWith(p)); if (pre) { libClosed.delete(pre); if (pre !== cat) M.cats().filter((c) => c.startsWith(pre) && c !== cat).forEach((c) => libClosed.add(c)); } else libClosed.add(cat); try { localStorage.setItem('matLibClosed', JSON.stringify(Array.from(libClosed))); } catch (e) { /* ignore */ } };
   function buildLib() {
     if (!S.lib) return;
-    const tab = S.view.libTab || 'materials';
-    const filter = UI.stopKeys(h('input', { type: 'text', class: 'mat-filter', placeholder: tab === 'nodes' ? 'Filter nodes…' : 'Filter materials…', value: S.libFilter || '' }));
+    const tab = ['materials', 'maps', 'nodes'].includes(S.view.libTab) ? S.view.libTab : 'materials';
+    const kind = M.kindOf(curMat());
+    const filter = UI.stopKeys(h('input', { type: 'text', class: 'mat-filter', placeholder: tab === 'nodes' ? 'Filter ' + (kind === 'effect' ? 'effect-map' : 'material') + ' nodes…' : tab === 'maps' ? 'Filter effect maps…' : 'Filter materials…', value: S.libFilter || '' }));
     const body = h('div', { class: 'mat-libbody' });
     const head = h('div', { class: 'mat-libhead' },
-      UI.seg([['materials', 'Materials'], ['nodes', 'Nodes']], tab, (v) => { S.view.libTab = v; saveView(); buildLib(); }));
+      UI.seg([['materials', 'Materials', 'Starter materials'], ['maps', 'Maps', 'Starter effect maps'], ['nodes', 'Nodes', 'Nodes for the open material / map']], tab, (v) => { S.view.libTab = v; saveView(); buildLib(); }));
     S.lib.replaceChildren(head, filter, body);
     const fill = () => {
       const q = filter.value.trim().toLowerCase();
@@ -172,15 +189,23 @@
       body.replaceChildren();
       thumbQueue = [];
       if (tab === 'nodes') {
-        M.CATS.forEach((cat) => {
-          const list = M.list().filter((d) => d.cat === cat && d.id !== 'material' && (!q || (d.name + ' ' + (d.help || '') + ' ' + d.id).toLowerCase().includes(q)));
+        body.append(h('div', { class: 'mat-kindnote' }, kind === 'effect' ? 'Nodes for effect maps · ' + M.list('effect').length : 'Nodes for materials · ' + M.list('material').length));
+        M.cats(kind).forEach((cat) => {
+          const list = M.list(kind).filter((d) => d.cat === cat && !d.isOutput && (!q || (d.name + ' ' + (d.help || '') + ' ' + d.id + ' ' + cat).toLowerCase().includes(q)));
           if (!list.length) return;
-          body.append(h('div', { class: 'mat-cat', style: { '--cat': M.CAT_COLOR[cat] } }, cat));
+          const closed = !q && isClosed(cat);
+          body.append(h('div', { class: 'mat-cat click' + (closed ? ' closed' : ''), style: { '--cat': M.catColor(cat) }, onclick: () => { toggleCat(cat); fill(); } }, cat + ' · ' + list.length));
+          if (closed) return;
           list.forEach((d) => body.append(h('div', { class: 'mat-li', draggable: 'true', title: (d.help || d.name) + ' · click to add, or drag onto the graph',
             ondragstart: (e) => { e.dataTransfer.setData('text/x-mat-node', d.id); e.dataTransfer.effectAllowed = 'copy'; },
-            onclick: () => { if (!curMat()) M.newEmpty(); const r = G.el().getBoundingClientRect(); const v = { x: r.left + r.width * 0.4, y: r.top + r.height * 0.4 }; G.addNodeAtScreen ? G.addNodeAtScreen(d.id, v.x, v.y) : G.addNode(d.id, 0, 0); } },
-          h('i', { style: { background: M.CAT_COLOR[cat] } }), h('span', null, d.name))));
+            onclick: () => { if (!curMat()) (kind === 'effect' ? M.newEmptyMap : M.newEmpty)(); const r = G.el().getBoundingClientRect(); G.addNodeAtScreen(d.id, r.left + r.width * 0.4, r.top + r.height * 0.4); } },
+          h('i', { style: { background: M.catColor(cat) } }), h('span', null, d.name))));
         });
+      } else if (tab === 'maps') {
+        body.append(h('div', { class: 'mat-kindnote' }, 'Effect maps wire TypeLab’s ' + (TL.fx ? TL.fx.list.filter((f) => !f.hidden).length : '') + ' effects & filters, dither, blends, masks, layers, patterns and materials together. Use one on any layer (FX & Filters → Effect map).'),
+          h('div', { class: 'row wrap tight pad0' }, UI.btn('+ Empty effect map', () => M.newEmptyMap(), 'sm accent')));
+        M.fxPresets.filter((p) => !q || (p.name + ' ' + p.desc).toLowerCase().includes(q)).forEach((p) =>
+          body.append(h('div', { class: 'mat-mapi', title: 'Click to open as a new effect map', onclick: () => M.newMapFromPreset(p.id) }, h('b', null, p.name), h('span', null, p.desc))));
       } else {
         M.PRESET_CATS.forEach((cat) => {
           const list = M.presets.filter((p) => p.cat === cat && (!q || (p.name + ' ' + p.desc + ' ' + cat).toLowerCase().includes(q)));
@@ -218,6 +243,7 @@
   function render(draft) {
     const m = curMat();
     if (!S.active || !m) return;
+    if (M.kindOf(m) === 'effect') return renderFx(m, draft);
     const size = previewSize(draft);
     const c = previewCanvas;
     try {
@@ -246,6 +272,56 @@
     if (draft) { clearTimeout(idleT); idleT = setTimeout(() => { if (!pointerDown) render(false); }, 180); }
     const s = $('status');
     if (s) s.textContent = `${m.name} · ${m.nodes.length} nodes · ${m.size}px · GPU ${Math.round(M.engine.mem / 1048576)} MB`;
+  }
+
+  // ----------------------------------------------------------------- effect-map preview (document-size, host image)
+  let fxCtx = null, fxCtxMap = null;
+  G.fxThumb = (id, out) => { const m = curMat(); return fxCtx && m && fxCtxMap === m.id ? M.fx.evalNode(m, id, out, fxCtx) : null; };
+  function renderFx(m, draft) {
+    const c = previewCanvas;
+    const s0 = Math.min(1, 900 / Math.max(TL.doc.width, TL.doc.height)), s = draft ? s0 * 0.5 : s0;
+    try {
+      const hi = M.fx.hostInput(m, s);
+      fxCtx = M.fx.newCtx({ input: hi.input, scale: s, bounds: hi.bounds, sig: hi.sig }); fxCtxMap = m.id;
+      const active = G.active && M.node(m, G.active), d = active && M.get(active.type);
+      const showNode = S.view.fxShow === 'node' && active && d && !d.isOutput;
+      const out = showNode ? M.fx.evalNode(m, active.id, G.activeOut, fxCtx) : M.fx.run(m, fxCtx);
+      if (c && c.isConnected) {
+        const x = c.getContext('2d'), W = c.width, H = c.height;
+        x.fillStyle = '#16161a'; x.fillRect(0, 0, W, H);
+        const sz = 12; x.fillStyle = '#1f1f25';
+        for (let yy = 0; yy < H; yy += sz) for (let xx = (yy / sz) % 2 ? sz : 0; xx < W; xx += sz * 2) x.fillRect(xx, yy, sz, sz);
+        if (out) { const k = Math.min(W / out.width, H / out.height); x.drawImage(out, (W - out.width * k) / 2, (H - out.height * k) / 2, out.width * k, out.height * k); }
+      }
+      G.drawThumbs(0);
+    } catch (e) { console.error('Effect map preview failed', e); }
+    if (draft) { clearTimeout(idleT); idleT = setTimeout(() => { if (!pointerDown) render(false); }, 180); }
+    const st2 = $('status');
+    if (st2) st2.textContent = `${m.name} · effect map · ${m.nodes.length} nodes · used ${M.hostsOf(m.id).length}× · cache ${Math.round(M.fx.bytes / 1048576)} MB`;
+  }
+  function fxPreviewSection(m) {
+    previewSection(); // makes the canvas + its handlers
+    const V = S.view;
+    const hosts = M.hostsOf(m.id);
+    const body = h('div', { class: 'stack' },
+      h('div', { class: 'row' }, UI.seg([['result', 'Result'], ['node', 'Selected node']], V.fxShow || 'result', (v) => { V.fxShow = v; saveView(); UI.buildInspector(); schedule(); })),
+      previewCanvas,
+      UI.note(hosts.length ? 'Showing it on ' + (hosts[0].layer ? '“' + UI.layerName(hosts[0].layer, 24) + '”' : 'the whole image') + (hosts.length > 1 ? ' (+' + (hosts.length - 1) + ' more)' : '') + '.' : 'Not used yet — the preview runs it on the whole document. Add it to a layer below.'));
+    return UI.section('Preview', body, { id: 'mat-preview' });
+  }
+  function mapUseSection(m) {
+    const hosts = M.hostsOf(m.id);
+    const L = TL.cur();
+    const list = h('div', { class: 'stack tight' }, hosts.map((hh) => h('div', { class: 'row' },
+      h('span', { class: 'grow' }, hh.layer ? UI.layerName(hh.layer, 26) : 'Whole image'),
+      UI.btn('Remove', () => { (hh.layer ? hh.layer.effects : TL.doc.finish.effects).splice(hh.index, 1); TL.commit('Remove effect map'); TL.emit('effects'); UI.buildInspector(); }, 'xs'))));
+    return UI.section('Use this map', h('div', { class: 'stack' },
+      UI.note('The map runs as one effect in a layer’s FX stack (or the Whole image stack). Input = the image arriving there, Output = the result.'),
+      h('div', { class: 'row wrap tight' },
+        UI.btn(L ? 'Add to “' + UI.layerName(L, 16) + '”' : 'Add to selected layer', () => { if (M.attachMap(m.id, 'layer')) UI.buildInspector(); schedule(); }, 'sm accent'),
+        UI.btn('Add to whole image', () => { M.attachMap(m.id, 'finish'); UI.buildInspector(); schedule(); }, 'sm')),
+      hosts.length ? h('div', { class: 'lab' }, 'Used by') : null, list,
+      h('div', { class: 'row wrap tight' }, UI.btn('Arrange nodes', G.arrange, 'xs'), UI.btn('Fit view', G.fit, 'xs'))), { id: 'mat-use' });
   }
 
   function previewSection() {
@@ -298,6 +374,16 @@
         TL.commit('Pattern from layer'); UI.buildInspector(); schedule();
       });
     }
+    if (q.type === 'matref') {
+      const list = M.mats('material');
+      return h('div', { class: 'stack tight' }, UI.select(q.label, [['', list.length ? '— choose —' : 'no materials yet']].concat(list.map((x) => [x.id, x.name])), n.p[q.k] || '', (v) => { n.p[q.k] = v; TL.commit('Material source'); schedule(); }),
+        list.length ? null : UI.btn('Make one from the library', () => { S.view.libTab = 'materials'; saveView(); buildLib(); }, 'xs'));
+    }
+    if (q.type === 'palette') {
+      const pals = TL.pal ? TL.pal.all() : [];
+      return UI.select(q.label, pals.map((p) => [p.id, p.name + ' (' + (p.colors ? p.colors.length : 0) + ')']), n.p[q.k], (v) => { n.p[q.k] = v; TL.commit('Palette'); schedule(); });
+    }
+    if (q.type === 'image' && n.type !== 'image') return null; // effect params with an imported image: TypeLab's own control
     if (q.type === 'image') {
       const im = n.imageId ? TL.asset.get(n.imageId) : null;
       const prev = U.canvas(44, 44);
@@ -325,22 +411,29 @@
     const err = M.engine.errors.get(n.id);
     if (err) body.append(h('div', { class: 'mat-err' }, 'Shader error: ' + err.slice(0, 300)));
     d.params.forEach((q) => {
-      const c = customControl(n, q) || (['font', 'text', 'select', 'bool', 'color'].includes(q.type) || q.min != null ? UI.paramControl(q, n.p, q.label) : null);
+      if (q.when && !q.when(n.p)) return;
+      const c = customControl(n, q) || (['font', 'text', 'select', 'bool', 'color', 'tile', 'image'].includes(q.type) || q.min != null ? UI.paramControl(q, n.p, q.label) : null);
       if (c) body.append(c);
     });
-    if (n.type !== 'material') {
+    if (!d.isOutput) {
       body.append(UI.slider({ label: 'Seed', min: 1, max: 999, step: 1, value: n.seed, def: 1, seed: true, onInput: (v) => { n.seed = v; TL.touch(); }, onChange: () => TL.commit('Seed') }));
       const outs = d.outputs.map((o, i) => [o, i]).filter(([o]) => !o.hidden);
       if (outs.length > 1) body.append(h('div', { class: 'row' }, h('label', null, 'Preview output'), UI.seg(outs.map(([o, i]) => [String(i), o.label]), String(G.activeOut), (v) => { G.setActive(n.id, +v); if (S.view.channel !== 'node') { S.view.channel = 'node'; saveView(); } UI.buildInspector(); })));
       body.append(h('div', { class: 'row wrap tight' },
-        UI.btn('Preview this node', () => { S.view.channel = 'node'; saveView(); UI.buildInspector(); schedule(); }, 'xs'),
+        UI.btn('Preview this node', () => { S.view.channel = 'node'; S.view.fxShow = 'node'; saveView(); UI.buildInspector(); schedule(); }, 'xs'),
         UI.btn('Duplicate', () => { G.select([n.id]); G.duplicate(); }, 'xs'),
         UI.btn('Reset', () => { n.p = M.defaults(n.type); TL.commit('Reset node'); G.sync(); UI.buildInspector(); }, 'xs'),
         UI.btn('Delete', () => { G.select([n.id]); G.deleteSelected(); }, 'xs')));
     }
-    return UI.section((n.type === 'material' ? 'Material output' : 'Node · ' + d.name), body, { id: 'mat-node' });
+    return UI.section((d.isOutput ? (n.type === 'material' ? 'Material output' : 'Output') : 'Node · ' + d.name), body, { id: 'mat-node' });
   }
 
+  function nameSection(m) {
+    const name = UI.stopKeys(h('input', { type: 'text', class: 'grow', value: m.name }));
+    name.addEventListener('change', () => { m.name = name.value.trim() || m.name; TL.commit('Rename'); buildTabs(); });
+    return UI.section('Effect map', h('div', { class: 'stack' }, h('div', { class: 'row' }, h('label', null, 'Name'), name),
+      h('div', { class: 'row wrap tight' }, UI.btn('Duplicate map', () => { const c = JSON.parse(JSON.stringify(m)); c.id = U.uid('M'); c.name = m.name + ' copy'; addMaterial(c); }, 'xs'))), { id: 'mat-settings', closed: true });
+  }
   function materialSection(m) {
     const name = UI.stopKeys(h('input', { type: 'text', class: 'grow', value: m.name }));
     name.addEventListener('change', () => { m.name = name.value.trim() || m.name; TL.commit('Rename material'); buildTabs(); });
@@ -424,7 +517,11 @@
       h('div', { class: 'lab' }, 'Use in this document'),
       UI.slider({ label: 'Tiles across', min: 1, max: 16, step: 1, value: E.layerTiles, def: 4, onInput: (v) => { E.layerTiles = v; }, onChange: saveExp }),
       UI.toggle('Lit (shaded with the normal map)', E.layerLit, (v) => { E.layerLit = v; saveExp(); }),
-      h('div', { class: 'row wrap tight' }, UI.btn('Add as a layer', () => M.toLayer(m, E.layerTiles, E.layerLit), 'sm'))), { id: 'mat-export' });
+      h('div', { class: 'row wrap tight' }, UI.btn('Add as a layer', () => M.toLayer(m, E.layerTiles, E.layerLit), 'sm'), UI.btn('Pattern layer', () => M.asPatternLayer(m), 'sm')),
+      h('div', { class: 'row wrap tight' },
+        UI.btn('Fill selected text', () => { const L = TL.cur(); if (!L || L.type !== 'text') { U.toast('Select a text layer first'); return; } M.asPatternLayer(m, L.id); }, 'sm'),
+        UI.btn('Material effect on layer', () => { const L = TL.cur(); if (!L) { U.toast('Select a layer first'); return; } const e = TL.make.effect('matfx'); e.p.mat = m.id; L.effects.push(e); TL.commit('Material effect'); TL.emit('effects'); U.toast('Added the Material effect to "' + UI.layerName(L, 20) + '" (FX & Filters)'); }, 'sm')),
+      UI.note('Pattern layer / text fill / texture brush: this material is also in the Pattern picker under “Materials (node)”. The Material effect lights a layer with this material’s real normal map.')), { id: 'mat-export' });
   }
 
   // ----------------------------------------------------------------- mode
@@ -437,7 +534,15 @@
       buildTabs();
       const hint = $('hint');
       if (hint) hint.textContent = 'Space / right-click: add node · drag output → input to connect · wheel: zoom · middle-drag: pan · F: fit · Del: delete';
-      if (!m) { box.append(UI.section('Material', UI.note('Pick a material from the library on the left, or start an empty one.'), { id: 'mat-none' })); return; }
+      if (!m) { box.append(UI.section('Material', UI.note('Pick a material or an effect map from the library on the left, or start an empty one.'), { id: 'mat-none' })); return; }
+      if (M.kindOf(m) === 'effect') {
+        box.append(fxPreviewSection(m));
+        const nsx = nodeSection(m);
+        if (nsx) box.append(nsx);
+        box.append(mapUseSection(m), nameSection(m));
+        schedule();
+        return;
+      }
       box.append(previewSection());
       const ns = nodeSection(m);
       if (ns) box.append(ns);
@@ -517,13 +622,38 @@
     e.stopImmediatePropagation();
   }
 
+  // ================================================================= parameter controls: material / map pickers (used in FX cards)
+  const pc0 = UI.paramControl;
+  if (pc0 && !pc0.__mat) {
+    UI.paramControl = (q, p, label) => {
+      if (q.type !== 'matref' && q.type !== 'mapref') return pc0(q, p, label);
+      const kind = q.type === 'matref' ? 'material' : 'effect';
+      const list = M.mats(kind);
+      const sel = UI.select(q.label, [['', list.length ? '— choose —' : (kind === 'material' ? 'no materials yet' : 'no effect maps yet')]].concat(list.map((m) => [m.id, m.name])), p[q.k] || '', (v) => { p[q.k] = v; TL.commit(label); UI.buildInspector(); });
+      const open = () => {
+        let id = p[q.k];
+        if (!M.find(id)) {
+          const m = kind === 'material' ? M.newMaterial('Material ' + (M.mats('material').length + 1)) : M.newEffectMap('Effect map ' + (M.mats('effect').length + 1));
+          TL.doc.materials.push(m); id = p[q.k] = m.id; TL.commit('New ' + (kind === 'material' ? 'material' : 'effect map'));
+        }
+        st.matId = id;
+        UI.setMode('material');
+        switchTo(id);
+      };
+      return h('div', { class: 'stack tight' }, sel, h('div', { class: 'row wrap tight' }, UI.btn(M.find(p[q.k]) ? 'Edit in Material tab' : 'Create + edit', open, 'xs')));
+    };
+    UI.paramControl.__mat = true;
+  }
+
   // ----------------------------------------------------------------- Ctrl+K commands
   if (UI.addCommands) UI.addCommands(() => [
     { label: 'Go to Material', cat: 'Workspace', key: String(UI.modeOrder.indexOf('material') + 1), run: () => UI.setMode('material') },
     { label: 'New empty material', cat: 'Material', run: () => { UI.setMode('material'); M.newEmpty(); } },
     { label: 'Export material maps (.zip)', cat: 'Material', run: () => { const m = curMat(); if (m) M.exportZip(m); else U.toast('No material yet'); } },
     { label: 'Add material to the canvas as a layer', cat: 'Material', run: () => { const m = curMat(); if (m) M.toLayer(m, S.exp.layerTiles, S.exp.layerLit); } },
+    { label: 'New empty effect map', cat: 'Material', run: () => { UI.setMode('material'); M.newEmptyMap(); } },
     ...M.presets.map((p) => ({ label: 'New material: ' + p.name, cat: 'Material · ' + p.cat, run: () => { UI.setMode('material'); M.newFromPreset(p.id); } })),
-    ...(st.mode === 'material' ? M.list().filter((d) => d.id !== 'material').map((d) => ({ label: 'Add node: ' + d.name, cat: 'Material node · ' + d.cat, run: () => G.addMenuAtMouse && G.addNodeAtScreen(d.id, innerWidth / 2, innerHeight / 2) })) : []),
+    ...M.fxPresets.map((p) => ({ label: 'New effect map: ' + p.name, cat: 'Effect map', run: () => { UI.setMode('material'); M.newMapFromPreset(p.id); } })),
+    ...(st.mode === 'material' ? M.list(M.kindOf(curMat())).filter((d) => !d.isOutput).map((d) => ({ label: 'Add node: ' + d.name, cat: 'Material node · ' + d.cat, run: () => G.addMenuAtMouse && G.addNodeAtScreen(d.id, innerWidth / 2, innerHeight / 2) })) : []),
   ]);
 })(window.TL);

@@ -348,7 +348,7 @@
     outputs: [GO('out', 'Out', 'clamp(0.5 + c*p_strength, 0.0, 1.0)')] });
 
   // ================================================================ Output
-  def({ id: 'material', name: 'Material', cat: 'Output', help: 'The final material. Unconnected channels use the values below; with no normal input the normal map is made from the height.',
+  def({ id: 'material', name: 'Material', cat: 'Output', isOutput: true, help: 'The final material. Unconnected channels use the values below; with no normal input the normal map is made from the height.',
     inputs: [CI('albedo', 'Albedo', 'vec4(p_albedo, 1.0)'), GI('metallic', 'Metallic', 'p_metallic'), GI('roughness', 'Roughness', 'p_roughness'), CI('emission', 'Emission', [0, 0, 0, 1]),
       CI('normal', 'Normal', [0.5, 0.5, 1, 1]), GI('ao', 'Ambient occlusion', 1), GI('height', 'Height', 0.5), GI('opacity', 'Opacity', 1)],
     params: [C('albedo', 'Albedo', '#bbbbbb'), F('metallic', 'Metallic', 0, 1, 0), F('roughness', 'Roughness', 0, 1, 0.6), F('emissive', 'Emission strength', 0, 8, 1), F('normalStrength', 'Normal from height', 0, 8, 1), F('aoStrength', 'AO strength', 0, 1, 1), F('depth', 'Height depth (3D)', 0, 0.2, 0.05, 0.001)],

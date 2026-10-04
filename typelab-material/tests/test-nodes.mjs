@@ -4,7 +4,7 @@ import { open, check, done } from './_launch.mjs';
 const { browser, page, errors } = await open();
 const r = await page.evaluate(() => {
   const M = TL.mat, N = 96, list = [], bad = [];
-  for (const d of M.list()) d.outputs.forEach((o, i) => list.push([d, i]));
+  for (const d of M.list('material').filter((x) => !x.id.startsWith('tlfx:'))) d.outputs.forEach((o, i) => list.push([d, i])); // TypeLab-effect nodes: test-effectmaps
   const cols = 10, sheet = document.createElement('canvas');
   sheet.width = cols * N; sheet.height = Math.ceil(list.length / cols) * (N + 12);
   const sx = sheet.getContext('2d'); sx.fillStyle = '#222'; sx.fillRect(0, 0, sheet.width, sheet.height); sx.font = '9px sans-serif';
@@ -17,9 +17,9 @@ const r = await page.evaluate(() => {
     sx.drawImage(c, x, y); sx.fillStyle = M.engine.errors.has(n.id) ? '#f55' : '#ddd'; sx.fillText(d.id + ':' + d.outputs[i].k, x + 2, y + N + 9);
     if (M.engine.errors.has(n.id)) bad.push(d.id + ':' + d.outputs[i].k + ' ' + M.engine.errors.get(n.id).slice(0, 300));
   });
-  return { n: list.length, defs: M.list().length, bad, png: sheet.toDataURL() };
+  return { n: list.length, defs: M.list('material').filter((x) => !x.id.startsWith('tlfx:')).length, bad, png: sheet.toDataURL() };
 });
 fs.writeFileSync('nodes-sheet.png', Buffer.from(r.png.split(',')[1], 'base64'));
-check(r.defs >= 50, 'node types registered', String(r.defs));
+check(r.defs >= 50, 'GPU material node types', String(r.defs));
 check(r.bad.length === 0, 'all ' + r.n + ' node outputs compile', r.bad.join('\n'));
 await done(browser, errors);

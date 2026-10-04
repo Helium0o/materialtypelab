@@ -16,13 +16,17 @@
   M.CATS = ['TypeLab', 'Generators', 'Patterns', 'Filters', 'Adjust', 'Combine', 'Transform', 'Height & normal', 'Output'];
   M.TYPE_COLOR = { gray: '#9a9aa6', color: '#5aa2ff' };
   M.CAT_COLOR = { TypeLab: '#c8ff3c', Generators: '#e0a030', Patterns: '#d06fd8', Filters: '#5aa2ff', Adjust: '#3fc4b0', Combine: '#f07850', Transform: '#8a8cff', 'Height & normal': '#b38cff', Output: '#ff5577' };
-  const NO_UNIFORM = new Set(['text', 'font', 'layer', 'pattern', 'image', 'gen']);
+  const CAT_PREFIX = [['Effects', '#5aa2ff'], ['Filter Gallery', '#3fc4b0'], ['Filter Menu', '#8a8cff'], ['Parametric', '#e0a030'], ['Craft Lab', '#f07850'], ['Textures', '#d06fd8'], ['TypeLab FX', '#c8ff3c'],
+    ['In / out', '#ff5577'], ['Masks', '#b0b0bc'], ['Sources', '#c8ff3c'], ['Generators (tiled)', '#e0a030']];
+  M.catColor = (cat) => M.CAT_COLOR[cat] || (CAT_PREFIX.find(([p]) => String(cat).startsWith(p)) || [0, '#888'])[1];
+  const NO_UNIFORM = new Set(['text', 'font', 'layer', 'pattern', 'image', 'gen', 'pat', 'matref', 'mapref', 'palette']);
   M.noUniform = (q) => NO_UNIFORM.has(q.type) || !!q.noUniform;
 
   // d: { id, name, cat, help, inputs:[{k,label,type,def}], outputs:[{k,label,type,expr,hidden}], params:[...],
   //      glsl (helper functions), code (statements in main), passes:[{code,expr}], source(node,size), sourceSig(node),
   //      inline: [param keys shown on the node card] }
   M.def = (d) => {
+    d.kind = d.kind || 'material'; // 'material' (GPU tile graph) | 'effect' (effect map, document-size canvases)
     d.inputs = d.inputs || [];
     d.outputs = d.outputs || [];
     d.params = d.params || [];
@@ -31,7 +35,9 @@
     M.defs.set(d.id, d);
   };
   M.get = (id) => M.defs.get(id);
-  M.list = () => Array.from(M.defs.values()).filter((d) => !d.hidden);
+  M.list = (kind) => Array.from(M.defs.values()).filter((d) => !d.hidden && (!kind || d.kind === kind));
+  M.kindOf = (mat) => (mat && mat.kind === 'effect' ? 'effect' : 'material');
+  M.cats = (kind) => { const seen = []; M.CATS.concat(M.list(kind).map((d) => d.cat)).forEach((c) => { if (!seen.includes(c) && M.list(kind).some((d) => d.cat === c)) seen.push(c); }); return seen; };
   M.defaults = (type) => { const d = M.get(type), p = {}; if (d) d.params.forEach((q) => (p[q.k] = Array.isArray(q.def) ? q.def.slice() : q.def)); return p; };
 
   // ================================================================= graph model
@@ -46,7 +52,7 @@
     return n;
   };
   M.node = (mat, id) => mat.nodes.find((n) => n.id === id);
-  M.output = (mat) => mat.nodes.find((n) => n.type === 'material');
+  M.output = (mat) => mat.nodes.find((n) => { const d = M.get(n.type); return d ? d.isOutput : n.type === 'material'; });
   M.inLink = (mat, nodeId, inIdx) => mat.links.find((l) => l.to === nodeId && l.in === inIdx);
   // would linking from → to create a cycle? (is `to` upstream of `from`?)
   M.upstream = (mat, id, acc = new Set()) => {
@@ -62,7 +68,7 @@
   };
   M.removeNodes = (mat, ids) => {
     const s = new Set(ids);
-    mat.nodes = mat.nodes.filter((n) => !s.has(n.id) || n.type === 'material');
+    mat.nodes = mat.nodes.filter((n) => !s.has(n.id) || (M.get(n.type) && M.get(n.type).isOutput));
     mat.links = mat.links.filter((l) => M.node(mat, l.from) && M.node(mat, l.to));
   };
   // repair a material (old / damaged / hand-edited): unknown node types are kept (drawn as missing), params filled
@@ -70,6 +76,7 @@
     if (!mat || typeof mat !== 'object') return null;
     if (!mat.id) mat.id = U.uid('M');
     if (typeof mat.name !== 'string') mat.name = 'Material';
+    if (mat.kind !== 'effect') delete mat.kind;
     mat.size = [256, 512, 1024, 2048, 4096].includes(mat.size) ? mat.size : 1024;
     mat.nodes = (Array.isArray(mat.nodes) ? mat.nodes : []).filter((n) => n && typeof n === 'object' && typeof n.type === 'string');
     const ids = new Set();
@@ -80,7 +87,7 @@
       if (M.get(n.type)) n.p = Object.assign(M.defaults(n.type), n.p && typeof n.p === 'object' ? n.p : {});
       else if (!n.p) n.p = {};
     });
-    if (!M.output(mat)) M.addNode(mat, 'material', 600, 120);
+    if (!M.output(mat)) M.addNode(mat, mat.kind === 'effect' ? 'fxout' : 'material', 600, 120);
     mat.links = (Array.isArray(mat.links) ? mat.links : []).filter((l) => l && ids.has(l.from) && ids.has(l.to));
     return mat;
   };
@@ -94,7 +101,8 @@
     };
     TL.migrate.__mat = true;
   }
-  M.mats = () => (TL.doc && TL.doc.materials) || [];
+  M.mats = (kind) => { const all = (TL.doc && TL.doc.materials) || []; return kind ? all.filter((m) => M.kindOf(m) === kind) : all; };
+  M.find = (id) => M.mats().find((m) => m.id === id) || null;
 
   // tidy layout: columns by depth from the sources, rows in order (used by presets and "Arrange")
   M.layout = (mat) => {
@@ -193,7 +201,7 @@ void main(){ vec2 p = vec2(float((gl_VertexID<<1)&2), float(gl_VertexID&2)); v_u
   const freeTex = (t) => { if (!t) return; gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); E.mem -= t.bytes; };
   const tmpTex = (size) => { const i = pool.findIndex((t) => t.size === size); return i >= 0 ? pool.splice(i, 1)[0] : newTex(size); };
   const relTex = (t) => { pool.push(t); while (pool.length > 6) freeTex(pool.shift()); };
-  E.flush = () => { for (const e of cache.values()) freeTex(e.t); cache.clear(); for (const e of srcCache.values()) freeTex(e.t); srcCache.clear(); while (pool.length) freeTex(pool.pop()); };
+  E.flush = () => { for (const e of cache.values()) freeTex(e.t); cache.clear(); for (const e of srcCache.values()) freeTex(e.t); srcCache.clear(); for (const e of cpuCache.values()) freeTex(e.t); cpuCache.clear(); while (pool.length) freeTex(pool.pop()); };
   // keep GPU memory under the budget: drop least recently used outputs (they are just recomputed when needed)
   const trim = () => {
     if (E.mem <= E.budget) return;
@@ -219,7 +227,7 @@ void main(){ vec2 p = vec2(float((gl_VertexID<<1)&2), float(gl_VertexID&2)); v_u
       if (inp.type === 'gray') lines.push(`float i_${inp.k}(vec2 uv){ return has_${inp.k} > 0.5 ? luma(texture(t_${inp.k}, uv).rgb) : ${defExpr(inp)}; }`);
       else lines.push(`vec4 i_${inp.k}(vec2 uv){ return has_${inp.k} > 0.5 ? texture(t_${inp.k}, uv) : ${defExpr(inp)}; }`);
     });
-    if (d.source) lines.push('uniform sampler2D t_src; uniform float has_src; vec4 src(vec2 uv){ return has_src > 0.5 ? texture(t_src, uv) : vec4(0.0); }');
+    if (d.source || d.cpu) lines.push('uniform sampler2D t_src; uniform float has_src; vec4 src(vec2 uv){ return has_src > 0.5 ? texture(t_src, uv) : vec4(0.0); }');
     if (d.passes) lines.push('uniform sampler2D t_prev; vec4 prev(vec2 uv){ return texture(t_prev, uv); }');
     if (d.glsl) lines.push(d.glsl);
     const out = d.outputs[outIdx];
@@ -249,7 +257,7 @@ void main(){ vec2 p = vec2(float((gl_VertexID<<1)&2), float(gl_VertexID&2)); v_u
     const d = M.get(n.type);
     let s = n.type + '|' + out + '|' + size + '|' + JSON.stringify(n.p) + '|' + n.seed + '|' + (n.imageId || '');
     if (d && d.sourceSig) { try { s += '|src:' + d.sourceSig(n, size); } catch (e) { s += '|src:err'; } }
-    if (d && d.source) s += '|g' + (srcGen.get(n.id + ':' + size) || 0);
+    if (d && (d.source || d.cpu)) s += '|g' + (srcGen.get(n.id + ':' + size) || 0);
     if (d) d.inputs.forEach((inp, i) => {
       const l = M.inLink(mat, n.id, i);
       const up = l && M.node(mat, l.from);
@@ -305,6 +313,28 @@ void main(){ vec2 p = vec2(float((gl_VertexID<<1)&2), float(gl_VertexID&2)); v_u
     return t;
   };
 
+  // CPU nodes with inputs (e.g. a TypeLab effect inside a material): inputs are read back as canvases, d.cpu(node,
+  // size, canvases) returns a canvas (or a Promise), uploaded once per signature (sig already covers the inputs)
+  const cpuCache = new Map(); // nodeId:size → {sig, t, pending}
+  const cpuTex = (n, d, size, ins, sig) => {
+    const key = n.id + ':' + size;
+    const hit = cpuCache.get(key);
+    if (hit && (hit.sig === sig || hit.pending === sig)) return hit.t;
+    const canv = ins.map((t) => (t ? M.toCanvas(t, { mode: 'color' }) : null));
+    let r;
+    try { r = d.cpu(n, size, canv); } catch (e) { console.warn('Material CPU node failed', n.type, e); r = null; }
+    const entry = hit || { sig: null, t: null, pending: null };
+    cpuCache.set(key, entry);
+    const put = (c) => { if (entry.t) freeTex(entry.t); entry.t = c ? uploadSource(c, size) : null; entry.sig = sig; entry.pending = null; };
+    if (r && typeof r.then === 'function') {
+      entry.pending = sig;
+      r.then((c) => { if (entry.pending !== sig || !gl) return; put(c); srcGen.set(key, (srcGen.get(key) || 0) + 1); TL.emit('matready'); }).catch((e) => console.warn(e));
+      return entry.t;
+    }
+    put(r);
+    return entry.t;
+  };
+
   // ---------------------------------------------------------------- run one node output
   const bindAndDraw = (prog, out) => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, out.fbo);
@@ -331,7 +361,7 @@ void main(){ vec2 p = vec2(float((gl_VertexID<<1)&2), float(gl_VertexID&2)); v_u
   E.eval = (mat, n, out, size, memo = new Map()) => {
     if (!E.init()) return null;
     const d = M.get(n.type);
-    if (!d) return null;
+    if (!d || d.kind !== 'material') return null;
     const sig = sigOf(mat, n, out, size, memo);
     const key = n.id + ':' + out + ':' + size;
     const hit = cache.get(key);
@@ -342,7 +372,7 @@ void main(){ vec2 p = vec2(float((gl_VertexID<<1)&2), float(gl_VertexID&2)); v_u
       const up = l && M.node(mat, l.from);
       return up ? E.eval(mat, up, l.out, size, memo) : null;
     });
-    const src = d.source ? sourceTex(n, d, size) : null;
+    const src = d.source ? sourceTex(n, d, size) : d.cpu ? cpuTex(n, d, size, ins, sigOf(mat, n, -1, size, memo)) : null;
     const target = hit ? hit.t : newTex(size);
     const passes = d.passes ? d.passes.length : 1;
     let prev = null;
@@ -376,19 +406,31 @@ void main(){ vec2 p = vec2(float((gl_VertexID<<1)&2), float(gl_VertexID&2)); v_u
     return target;
   };
   E.tick = () => { frame++; trim(); };
+  // a CPU node used a quick approximation (TypeLab's live/async paths): run it again shortly, a limited number of times
+  const retries = new Map();
+  E.retryLater = (id) => {
+    const n = (retries.get(id) || 0) + 1;
+    retries.set(id, n);
+    if (n > 12) return;
+    setTimeout(() => {
+      for (const k of cpuCache.keys()) if (k.startsWith(id + ':')) srcGen.set(k, (srcGen.get(k) || 0) + 1);
+      TL.emit('matready');
+    }, 600);
+  };
   // free every cached texture of a material (throwaway materials: library thumbnails, previews of presets)
   E.forget = (mat) => {
     if (!gl || !mat) return;
     const ids = new Set(mat.nodes.map((n) => n.id));
     for (const [k, e] of cache) if (ids.has(k.split(':')[0])) { freeTex(e.t); cache.delete(k); }
     for (const [k, e] of srcCache) if (ids.has(k.split(':')[0])) { if (e.t) freeTex(e.t); srcCache.delete(k); }
+    for (const [k, e] of cpuCache) if (ids.has(k.split(':')[0])) { if (e.t) freeTex(e.t); cpuCache.delete(k); }
   };
 
   // the material's channels (from the Material node; unconnected channels use the node's defaults)
   M.CHANNELS = ['albedo', 'metallic', 'roughness', 'emission', 'normal', 'ao', 'height', 'opacity'];
   M.maps = (mat, size) => {
     const out = M.output(mat);
-    if (!out || !E.init()) return null;
+    if (!out || out.type !== 'material' || !E.init()) return null;
     const memo = new Map(), d = M.get('material'), maps = {};
     M.CHANNELS.forEach((ch) => { maps[ch] = E.eval(mat, out, d.outputs.findIndex((o) => o.k === ch), size, memo); });
     return maps;

@@ -115,3 +115,18 @@ body[data-mode="material"] #hint { bottom: 34px; left: calc(50% + 125px); }
 .mat-prev { width: 100%; aspect-ratio: 1; border-radius: 8px; background: #111114; display: block; cursor: grab; border: 1px solid var(--line); }
 .mat-checks { display: grid; grid-template-columns: 1fr; gap: 0; }
 .mat-err { color: #ff8a9a; font: 10.5px var(--mono); white-space: pre-wrap; background: #2a1016; border-radius: 6px; padding: 6px 8px; }
+
+/* ---------------------------------------------------------------- effect maps + library extras */
+.mat-cat.click { cursor: pointer; display: flex; align-items: center; }
+.mat-cat.click::after { content: '▾'; margin-left: auto; color: var(--dimmer); font-size: 10px; }
+.mat-cat.click.closed::after { content: '▸'; }
+.mat-cat.click:hover { color: var(--text); }
+.mat-kindnote { margin: 6px 6px 4px; color: var(--dimmer); font-size: 11px; line-height: 1.4; }
+.pad0 { padding: 4px 6px 8px; }
+.mat-mapi { display: flex; flex-direction: column; gap: 2px; margin: 4px 4px; padding: 8px 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel2); cursor: pointer; }
+.mat-mapi:hover { border-color: var(--line2); background: var(--hover); }
+.mat-mapi b { font-weight: 650; }
+.mat-mapi span { color: var(--dim); font-size: 11px; line-height: 1.35; }
+.mt-kind { font: 700 9.5px var(--mono); color: var(--acc-ink); background: var(--acc); border-radius: 4px; padding: 1px 4px; }
+.mat-libhead .seg button { padding: 3px 4px; }
+.mg-selmenu .menu { max-height: 360px; overflow-y: auto; }

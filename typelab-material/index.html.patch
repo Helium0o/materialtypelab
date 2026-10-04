@@ -8,7 +8,7 @@
  </head>
  <body>
    <div id="app">
-@@ -60,6 +61,13 @@
+@@ -60,6 +61,15 @@
    <script src="js/mockup.js"></script>
    <script src="js/batch.js"></script>
    <script src="js/autosave.js"></script>
@@ -18,11 +18,13 @@
 +  <script src="js/material/mat-nodes-typelab.js"></script>
 +  <script src="js/material/mat-presets.js"></script>
 +  <script src="js/material/mat-preview3d.js"></script>
++  <script src="js/material/mat-link.js"></script>
++  <script src="js/material/mat-fxmap.js"></script>
 +  <script src="js/material/mat-graph.js"></script>
    <script src="js/view.js"></script>
    <script src="js/tools.js"></script>
    <script src="js/ui/kit.js"></script>
-@@ -75,6 +83,7 @@
+@@ -75,6 +85,7 @@
    <script src="js/ui/mode-paint.js"></script>
    <script src="js/ui/mode-export.js"></script>
    <script src="js/ui/export-preview.js"></script>

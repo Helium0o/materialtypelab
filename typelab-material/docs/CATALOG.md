@@ -1,10 +1,12 @@
-# Material catalog
+# Catalog
 
-Generated from the code (`M.presets`, `M.list()`). Pictures: [materials-3d.jpg](materials-3d.jpg) (spheres), [materials-2d-lit.jpg](materials-2d-lit.jpg) (flat, lit).
+Generated from the code. Pictures: [materials-3d.jpg](materials-3d.jpg), [materials-2d-lit.jpg](materials-2d-lit.jpg), [effect-map-starters.png](effect-map-starters.png).
 
-## 90 starter materials
+Contents: [starter materials](#starter-materials) · [starter effect maps](#starter-effect-maps) · [material nodes](#material-nodes) · [effect-map nodes](#effect-map-nodes)
 
-Each one opens as a normal, editable node graph (Library → Materials, or Ctrl+K "New material: …").
+## Starter materials
+
+90 materials. Each one opens as an editable node graph (library → **Materials**, or Ctrl+K "New material: …").
 
 ### Bricks & tiles (12)
 
@@ -146,7 +148,24 @@ Each one opens as a normal, editable node graph (Library → Materials, or Ctrl+
 | Letterpress | Type pressed deep into thick cotton paper |
 | Layer as relief | Pick any layer of your document — it becomes a bevelled relief in metal |
 
-## 54 nodes
+## Starter effect maps
+
+8 maps (library → **Maps**, or Ctrl+K "New effect map: …"). They use the selected layer's image as their Input.
+
+| Effect map | What it does |
+|---|---|
+| Glow through noise | A glow that only shows where a noise mask is bright |
+| Dithered shadow | A long soft shadow, dithered, with the clean original on top |
+| Glitch on the edges | RGB split and scanlines only around the edges of the shape |
+| Neon double glow | Tight cyan glow + wide pink glow, screened together |
+| Brick letters | Fills the shape with the Red bricks material (made for you), with a drop shadow |
+| Rusty metal type | Rusty iron material inside the shape, lit by its own relief, outlined |
+| Watercolour + ink | Watercolour filter with ink outlines multiplied on top |
+| Halftone in camo | Halftone of the shape, coloured by a woodland camo pattern |
+
+## Material nodes
+
+There are 54 GPU nodes, plus **313 TypeLab effects and filters as material nodes** (category "TypeLab FX · …"). Each of those runs on the tile laid out 3×3, so the material stays seamless.
 
 ### Generators
 
@@ -241,3 +260,79 @@ Each one opens as a normal, editable node graph (Library → Materials, or Ctrl+
 | Document | `document` | — | Colour (color), Gray (gray) | The whole finished document (all visible layers + whole-image effects) |
 | Pattern | `pattern` | — | Colour (color), Gray (gray), Alpha (gray) | Any Pattern-workspace generator (camo, tartan, knit, damask…) — or a copy of a pattern layer |
 | Image | `image` | — | Colour (color), Gray (gray), Alpha (gray) | An imported picture (photo, scan, logo). Add "Make tileable" after it if it is not seamless. |
+
+### TypeLab FX (CPU, seamless 3×3)
+
+| Category | Nodes |
+|---|---|
+| TypeLab FX · Effects | 64 |
+| TypeLab FX · Filter Gallery | 47 |
+| TypeLab FX · Filter Menu | 37 |
+| TypeLab FX · Parametric | 22 |
+| TypeLab FX · Craft Lab | 27 |
+| TypeLab FX · Textures | 116 |
+
+## Effect-map nodes
+
+There are 347 nodes. Values are document-size images; a **mask** is a gray image. Every TypeLab effect and filter is a node, with an optional **Mask** input that limits it to an area.
+
+| Category | Nodes |
+|---|---|
+| In / out | 2 |
+| Effects · Blur & Light | 7 |
+| Effects · Glitch | 8 |
+| Effects · Distort | 7 |
+| Effects · Grunge & Texture | 9 |
+| Effects · Stylize | 11 |
+| Effects · Color | 7 |
+| Effects · Post FX | 7 |
+| Effects · Adjust | 9 |
+| Filter Gallery | 47 |
+| Filter Menu | 37 |
+| Parametric | 22 |
+| Craft Lab | 27 |
+| Textures | 116 |
+| Effects · Material | 1 |
+| Combine | 3 |
+| Masks | 2 |
+| Sources | 5 |
+| Generators (tiled) | 19 |
+| Transform | 1 |
+
+### Map-only nodes
+
+| Node | id | Inputs | Outputs | What it does |
+|---|---|---|---|---|
+| Input | `fxin` | — | Image (image) | The image arriving at this effect: the layer (with the effects above this one), or the whole image |
+| Output | `fxout` | Image (image) | — | Whatever arrives here is the result of the effect map |
+| Dither | `fxdither` | Image (image), Mask (optional) (mask) | Image (image) | Any of TypeLab’s dither styles with a palette (the Dither workspace has every detail) |
+| Blend | `fxblend` | A (bottom) (image), B (top) (image), Mask (optional) (mask) | Image (image) | B over A with any of the 27 blend modes, opacity and an optional mask |
+| Mix by mask | `fxmix` | A (image), B (image), Mask (mask) | Image (image) | A where the mask is black, B where it is white |
+| Cut out by mask | `fxcutout` | Image (image), Mask (mask) | Image (image) | Keeps the image only where the mask is white (multiplies its alpha) |
+| Mask from image | `fxmask` | Image (image) | Mask (mask) | Turns an image into a mask: its alpha (shape), brightness, or one channel |
+| Mask adjust | `fxmaskadj` | Mask (mask) | Mask (mask) | Levels / invert / threshold for a mask (blur, grow and shrink it with Blur, Maximum, Minimum) |
+| Solid colour | `fxcolor` | — | Image (image) |  |
+| Layer | `fxlayer` | — | Image (image) | Another layer of the document, where it sits on the page |
+| Document | `fxdoc` | — | Image (image) | The whole document (effect maps inside it pass through, so nothing loops) |
+| Pattern | `fxpattern` | — | Image (image) | Any Pattern-workspace generator, repeated over the page |
+| Material | `fxmaterial` | — | Image (image) | A material from this document, repeated over the page (lit, or one of its maps) |
+| Uniform gray | `gen:uniform` | — | Out (mask) | One flat gray value — repeated over the page |
+| Uniform color | `gen:color` | — | Out (image) | One flat colour — repeated over the page |
+| Gradient | `gen:gradient` | — | Out (mask) | Linear, radial, angular or diamond ramp, repeated — repeated over the page |
+| Noise (FBM) | `gen:noise` | — | Out (mask) | Fractal noise: value, Perlin or cellular; plain, ridged or billowy — repeated over the page |
+| Flow noise | `gen:flow` | — | Out (mask) | Domain-warped noise: marble, smoke, liquid — repeated over the page |
+| Voronoi | `gen:voronoi` | — | Cells (mask), Borders (mask), Distance (mask), Random (mask), Random color (image) | Cells: distance, borders, random value / colour per cell — repeated over the page |
+| Bricks | `gen:bricks` | — | Bricks (mask), Random (mask), Mortar mask (mask), Brick UV (image) | Running / stack bond bricks with mortar, bevel and per-brick random — repeated over the page |
+| Hex tiles | `gen:hextiles` | — | Tiles (mask), Random (mask) | Hexagonal tiles with grout, bevel and random per tile — repeated over the page |
+| Herringbone | `gen:herringbone` | — | Planks (mask), Random (mask), Direction (mask), Plank UV (image) | Parquet planks laid in herringbone (plank length : width) — repeated over the page |
+| Weave | `gen:weave` | — | Height (mask), Weft mask (mask), Thread mask (mask) | Plain weave: warp and weft threads going over and under — repeated over the page |
+| Stripes / waves | `gen:stripes` | — | Out (mask) | Straight or wavy stripes (sine, triangle, square, saw), optional noise warp — repeated over the page |
+| Wood rings | `gen:wood` | — | Wood (mask), Rings (mask), Grain (mask) | Growth rings + fine grain, along the vertical axis — repeated over the page |
+| Shape | `gen:shape` | — | Out (mask), Distance (mask) | Circle, square, polygon, star or ring — repeated in a grid — repeated over the page |
+| Grid / checker | `gen:grid` | — | Lines (mask), Checker (mask) | Grid lines and a checkerboard — repeated over the page |
+| Scratches | `gen:scratches` | — | Out (mask) | Random straight scratches (metal, plastic, wood wear) — repeated over the page |
+| Scatter | `gen:scatter` | — | Out (mask), Random (mask), Random color (image) | Scatters a shape (input, or a dot) with random place, size, turn and value — pebbles, rivets, leaves, flakes — repeated over the page |
+| Cracks | `gen:cracks` | — | Cracks (mask), Plates (mask), Random (mask) | Branching cracks (dry mud, old paint, ice) — repeated over the page |
+| Fibers | `gen:fibers` | — | Out (mask) | Long thin fibres / hair / brushed streaks along one axis — repeated over the page |
+| Spots / dots | `gen:spots` | — | Out (mask) | Random soft spots of different sizes (rust spots, dirt, lichen) — repeated over the page |
+| Transform | `fxtransform` | Image (image) | Image (image) | Move, scale and turn the image (around the layer centre) |

@@ -112,12 +112,13 @@
   const typeColor = (t) => M.TYPE_COLOR[t] || '#999';
   function nodeEl(n) {
     const d = M.get(n.type);
-    const el = h('div', { class: 'mg-node' + (G.sel.has(n.id) ? ' sel' : '') + (G.active === n.id ? ' active' : '') + (d ? '' : ' missing') + (n.type === 'material' ? ' output' : ''), 'data-id': n.id, style: { left: n.x + 'px', top: n.y + 'px' } });
+    const isOut = !!(d && d.isOutput);
+    const el = h('div', { class: 'mg-node' + (G.sel.has(n.id) ? ' sel' : '') + (G.active === n.id ? ' active' : '') + (d ? '' : ' missing') + (isOut ? ' output' : ''), 'data-id': n.id, style: { left: n.x + 'px', top: n.y + 'px' } });
     const cat = d ? d.cat : 'Missing';
     const eye = h('button', { class: 'mg-eye' + (n.preview ? ' on' : ''), title: 'Show a preview on the node' }, '◉');
     eye.onclick = (e) => { e.stopPropagation(); n.preview = !n.preview; commit(n.preview ? 'Node preview on' : 'Node preview off'); G.sync(); };
-    const head = h('div', { class: 'mg-head', style: { '--cat': M.CAT_COLOR[cat] || '#888' }, title: d ? (d.help || d.name) : 'This node type is not installed: ' + n.type },
-      h('span', { class: 'mg-title' }, d ? d.name : 'Missing: ' + n.type), n.type === 'material' ? null : eye);
+    const head = h('div', { class: 'mg-head', style: { '--cat': M.catColor(cat) }, title: d ? (d.help || d.name) : 'This node type is not installed: ' + n.type },
+      h('span', { class: 'mg-title' }, d ? d.name : 'Missing: ' + n.type), isOut ? null : eye);
     el.append(head);
     if (!d) return el;
     const outs = d.outputs.map((o, i) => [o, i]).filter(([o]) => !o.hidden);
@@ -149,7 +150,10 @@
 
   // small draggable value on the node card
   const fmt = (q, v) => {
-    if (q.type === 'select') return String(q.options[v | 0] != null ? q.options[v | 0] : v);
+    if (q.type === 'select') {
+      const i = typeof v === 'number' ? v | 0 : q.options.indexOf(v);
+      return String(q.optionLabels && q.optionLabels[i] != null ? q.optionLabels[i] : q.options[i] != null ? q.options[i] : v);
+    }
     if (q.type === 'bool') return v ? 'on' : 'off';
     if (typeof v !== 'number') return String(v == null ? '' : v).slice(0, 14);
     return q.step >= 1 ? String(Math.round(v)) : (Math.round(v * 100) / 100).toString();
@@ -167,7 +171,11 @@
     row.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       e.stopPropagation();
-      if (q.type === 'select') { UI().menu(row, q.options.map((o, i) => ({ label: o, on: (n.p[q.k] | 0) === i, action: () => { n.p[q.k] = i; commit(q.label); G.refreshValues(); } }))); return; }
+      if (q.type === 'select') {
+        const num = typeof q.def === 'number';
+        UI().menu(row, q.options.map((o, i) => ({ label: q.optionLabels ? q.optionLabels[i] : o, on: num ? (n.p[q.k] | 0) === i : n.p[q.k] === o, action: () => { n.p[q.k] = num ? i : o; commit(q.label); G.refreshValues(); if (G.onSelect) G.onSelect(); } })), { cls: 'mg-selmenu' });
+        return;
+      }
       if (q.type === 'bool') { n.p[q.k] = !n.p[q.k]; commit(q.label); G.refreshValues(); return; }
       if (typeof n.p[q.k] !== 'number') return;
       const x0 = e.clientX, v0 = n.p[q.k];
@@ -264,7 +272,7 @@
   const compatible = () => true; // gray ↔ colour convert automatically (luminance / gray→rgb)
   G.deleteSelected = () => {
     if (!mat) return;
-    const ids = Array.from(G.sel).filter((id) => { const n = M.node(mat, id); return n && n.type !== 'material'; });
+    const ids = Array.from(G.sel).filter((id) => { const n = M.node(mat, id); return n && !(M.get(n.type) && M.get(n.type).isOutput); });
     if (!ids.length) return;
     M.removeNodes(mat, ids);
     G.sel.clear();
@@ -273,7 +281,7 @@
   };
   G.copy = () => {
     if (!mat) return false;
-    const nodes = G.selected().filter((n) => n.type !== 'material');
+    const nodes = G.selected().filter((n) => !(M.get(n.type) && M.get(n.type).isOutput));
     if (!nodes.length) return false;
     const ids = new Set(nodes.map((n) => n.id));
     clip = { nodes: JSON.parse(JSON.stringify(nodes)), links: mat.links.filter((l) => ids.has(l.from) && ids.has(l.to)).map((l) => Object.assign({}, l)) };
@@ -445,7 +453,7 @@
       { label: 'Reset settings', action: () => { n.p = M.defaults(n.type); commit('Reset node'); G.sync(); if (G.onSelect) G.onSelect(); } },
       { label: 'New random seed', action: () => { n.seed = 1 + Math.floor(Math.random() * 998); commit('Seed'); } },
       '-',
-      { label: 'Delete', hint: 'Del', disabled: n.type === 'material', action: G.deleteSelected },
+      { label: 'Delete', hint: 'Del', disabled: !!(M.get(n.type) && M.get(n.type).isOutput), action: G.deleteSelected },
     ]);
   }
 
@@ -453,7 +461,7 @@
   function addMenu(sx, sy, link, detached) {
     UI().closePopups && UI().closePopups();
     const [wx, wy] = toWorld(sx, sy);
-    const all = M.list().filter((d) => d.id !== 'material' || !M.output(mat));
+    const all = M.list(M.kindOf(mat)).filter((d) => !d.isOutput || !M.output(mat));
     const items = all.filter((d) => !link || (link.dir === 'o' ? d.inputs.length : d.outputs.some((o) => !o.hidden)));
     const input = UI().stopKeys(h('input', { type: 'text', class: 'mg-search', placeholder: link ? 'Add a node and connect it…' : 'Add node…' }));
     const list = h('div', { class: 'mg-mlist' });
@@ -469,7 +477,7 @@
       shown.forEach((d, i) => {
         if (!q.length && d.cat !== lastCat) { list.append(h('div', { class: 'mg-mcat' }, d.cat)); lastCat = d.cat; }
         list.append(h('div', { class: 'mg-mi' + (i === sel ? ' on' : ''), title: d.help || '', onmouseenter: () => { sel = i; paint(); }, onclick: () => pick(d) },
-          h('i', { style: { background: M.CAT_COLOR[d.cat] } }), h('span', null, d.name), q.length ? h('small', null, d.cat) : null));
+          h('i', { style: { background: M.catColor(d.cat) } }), h('span', null, d.name), q.length ? h('small', null, d.cat) : null));
       });
       if (!shown.length) list.append(h('div', { class: 'mg-mcat' }, 'No matches'));
     };
@@ -530,7 +538,7 @@
     const k = Math.min((W - 8) / (x1 - x0), (H - 8) / (y1 - y0));
     const ox = (W - (x1 - x0) * k) / 2 - x0 * k, oy = (H - (y1 - y0) * k) / 2 - y0 * k;
     miniBounds = { k, ox, oy };
-    boxes.forEach(([n, w, hh]) => { const d = M.get(n.type); x.fillStyle = d ? M.CAT_COLOR[d.cat] : '#f55'; x.globalAlpha = G.sel.has(n.id) ? 1 : 0.55; x.fillRect(ox + n.x * k, oy + n.y * k, Math.max(2, w * k), Math.max(2, hh * k)); });
+    boxes.forEach(([n, w, hh]) => { const d = M.get(n.type); x.fillStyle = d ? M.catColor(d.cat) : '#f55'; x.globalAlpha = G.sel.has(n.id) ? 1 : 0.55; x.fillRect(ox + n.x * k, oy + n.y * k, Math.max(2, w * k), Math.max(2, hh * k)); });
     x.globalAlpha = 1; x.strokeStyle = '#e6e6ea'; x.lineWidth = 1;
     x.strokeRect(ox + vx0 * k + 0.5, oy + vy0 * k + 0.5, (vx1 - vx0) * k, (vy1 - vy0) * k);
   }
@@ -552,16 +560,24 @@
   // node thumbnails (called by the workspace after each preview pass)
   G.drawThumbs = (size) => {
     if (!mat) return;
+    const fx = M.kindOf(mat) === 'effect';
     nodeEls.forEach((el, id) => {
       const c = el.querySelector('.mg-thumb');
       if (!c) return;
       const n = M.node(mat, id), d = M.get(n.type);
       if (!d) return;
+      if (fx) { // effect maps: document-size canvases, drawn fitted on a checker
+        const src = G.fxThumb ? G.fxThumb(id, Math.max(0, d.outputs.findIndex((o) => !o.hidden))) : null;
+        const x = c.getContext('2d');
+        x.fillStyle = '#26262c'; x.fillRect(0, 0, c.width, c.height);
+        if (src) { const k = Math.min(c.width / src.width, c.height / src.height); x.drawImage(src, (c.width - src.width * k) / 2, (c.height - src.height * k) / 2, src.width * k, src.height * k); }
+        return;
+      }
       const oi = Math.max(0, d.outputs.findIndex((o) => !o.hidden));
       const t = M.evalNode(mat, id, n.type === 'material' ? 0 : oi, size);
       if (t) M.draw2D(c, t, { mode: 'color' });
     });
     // error marks
-    nodeEls.forEach((el, id) => { const err = M.engine.errors.get(id); el.classList.toggle('err', !!err); if (err) el.title = err; });
+    nodeEls.forEach((el, id) => { const err = M.engine.errors.get(id) || (M.fx && M.fx.errors.get(id)); el.classList.toggle('err', !!err); if (err) el.title = err; });
   };
 })(window.TL);

@@ -1,12 +1,16 @@
-# Install the Material workspace into TypeLab
+# Install: Material workspace + effect maps
 
-This is for the session working on TypeLab. It takes about 5 minutes, and **no existing JS or CSS file changes**.
+This is for the session working on TypeLab. It takes about 10 minutes. **No existing TypeLab JS or CSS file changes.**
 
-The add-on was built and tested against the TypeLab tree the user sent (v2.3.0, ROADMAP at M27). It loads in that tree with zero console errors.
+Everything was built and tested against the TypeLab tree the user sent (v2.3.0, ROADMAP at M27): 5 Playwright suites, all passing, with zero console errors.
 
-## 1. Copy the files
+## User decisions (already made, built in)
 
-Copy these from `typelab-material/` into TypeLab, keeping the same paths:
+- The **effect-map editor lives inside the Material tab.** It's a second kind of tab next to materials, marked with a lime **fx** badge.
+- **Key 7** opens the Material tab. Before, 7 fell back to FX & Filters (M20's legacy shortcut).
+- There is **no "convert stack to map" button**, by request.
+
+## 1. Copy 11 files (same paths)
 
 ```
 app/css/material.css
@@ -16,79 +20,87 @@ app/js/material/mat-nodes.js
 app/js/material/mat-nodes-typelab.js
 app/js/material/mat-presets.js
 app/js/material/mat-preview3d.js
+app/js/material/mat-link.js
+app/js/material/mat-fxmap.js
 app/js/material/mat-graph.js
 app/js/ui/mode-material.js
 ```
 
-## 2. Add 9 lines to `app/index.html`
+## 2. Add 11 lines to `app/index.html`
 
-Either run `patch -p1 < typelab-material/index.html.patch` from the TypeLab root, or add the lines by hand.
-
-The patch keeps the file's CRLF line endings.
+Either run `patch -p1 < typelab-material/index.html.patch` from the TypeLab root (it keeps the CRLF line endings), or add the lines by hand:
 
 ```html
 <!-- after css/style.css -->
 <link rel="stylesheet" href="css/material.css">
 
-<!-- right before js/view.js (after autosave.js): needs util, state, patterns, texturelib, render, zip -->
+<!-- right before js/view.js (after autosave.js) — needs util, state, patterns, texturelib, gl, effects + all filters, dither, render, zip -->
 <script src="js/material/mat-glsl.js"></script>
 <script src="js/material/mat-core.js"></script>
 <script src="js/material/mat-nodes.js"></script>
 <script src="js/material/mat-nodes-typelab.js"></script>
 <script src="js/material/mat-presets.js"></script>
 <script src="js/material/mat-preview3d.js"></script>
+<script src="js/material/mat-link.js"></script>
+<script src="js/material/mat-fxmap.js"></script>
 <script src="js/material/mat-graph.js"></script>
 
-<!-- right after js/ui/export-preview.js (after shell.js, dock.js, mode-type.js; before variants.js and main.js) -->
+<!-- right after js/ui/export-preview.js (after shell, dock, kit, mode-type; before variants.js and main.js) -->
 <script src="js/ui/mode-material.js"></script>
 ```
 
 **Order matters:**
-- `mat-core.js` must load **before `main.js`**, because it wraps `TL.migrate` before the first `TL.newDoc`.
-- `mode-material.js` must load **after** `ui/shell.js`, `ui/kit.js` and `ui/mode-type.js`, because it uses `UI.paramControl`.
+- `mat-link.js` and `mat-fxmap.js` turn **every effect in `TL.fx.list` at load time** into a node. So they must load after `effects*.js` and `filters-*.js`, which they do if you insert them before `view.js`.
+- `mat-core.js` must load before `main.js`, because it wraps `TL.migrate`.
+- `mode-material.js` must load after `ui/mode-type.js`, because it wraps `UI.paramControl`.
 
-## 3. Check it
+## 3. Check it in the app (`npm start`)
 
-1. Start the app (`npm start`). A 7th tab, **Material**, appears. Press **7**.
-2. Click **Red bricks** in the library. The 3D sphere in the Settings panel shows bricks.
-3. Select a node and press **Delete**. The node disappears, and **the selected layer does not**. Press **Ctrl+Z** and it comes back.
-4. Press **Ctrl+S**, reopen the project, and the material is still there.
-5. Optional: run `tests/` (see `tests/README.md`): `test-nodes`, `test-materials` and `test-ui` (13 UI checks).
+1. A 7th tab, **Material**, appears. Press **7**.
+2. Library → **Materials** → **Red bricks**. A 3D brick sphere appears in the Settings panel.
+3. Library → **Maps** → **Neon double glow**. Select a text layer first; then **Use this map → Add to "…"**. The text glows on the canvas.
+4. In **FX & Filters**, the layer's stack shows an **Effect map** card. It has a map picker and **Edit in Material tab**.
+5. Open a material, select a text layer, then **Export & use → Fill selected text**. The letters are filled with the material.
+6. In the graph, select a node and press **Delete**. The node goes, **the selected layer does not**. Ctrl+Z brings the node back.
+7. Press Ctrl+S, reopen the project, and the materials and maps are all still there.
 
-For the exe harness, the tests only use `TL.*` inside `page.evaluate`, so their bodies work as `cdp.mjs evalfile:` scripts.
+**Automated tests** (see `tests/README.md`): `test-nodes`, `test-materials`, `test-ui`, `test-ui-maps`, `test-effectmaps`. The test bodies only use `TL.*` inside `page.evaluate`, so they can also run in the exe harness (`cdp.mjs evalfile:`).
 
-## What changes for users
+## What users get
 
-- **Key 7** now opens Material. Before, 7 fell back to FX & Filters (M20's legacy shortcut).
-  - If you'd rather keep that, change the push in `mode-material.js` to insert Material somewhere else, or remove it from `modeOrder` and open it from the File menu.
-  - **Ask the user** if unsure.
-- The Simple, Standard and Compact interface variants all work. The Material tab has no Quick picks; its library *is* the quick start.
-- Ctrl+K gains these commands:
-  - "Go to Material", "New empty material", "Export material maps", "Add material to the canvas as a layer";
-  - "New material: <name>" for each of the 90 materials;
-  - "Add node: <name>" while the Material tab is open.
+- **Material tab, library on the left:**
+  - **Materials**: 90 starters with 3D thumbnails.
+  - **Maps**: 8 starter effect maps, plus "Empty effect map".
+  - **Nodes**: the nodes for whichever graph is open. 54 GPU nodes plus 313 TypeLab effects for materials; 347 nodes for effect maps. Categories fold, and the filter box searches them.
+- **Settings panel:**
+  - for a material: Preview (3D or 2D), node settings, Material, and **Export & use**. Export & use covers the maps zip, add as layer, pattern layer, *Fill selected text* and *Material effect on layer*.
+  - for an effect map: Preview (the result on its layer, or one node), node settings, and **Use this map** (add to layer or Whole image, list of where it's used, remove).
+- **FX & Filters gains two effects:**
+  - **Effect map**, in the "Node maps" category;
+  - **Material**: Fill, Overlay, Multiply, Relief, Lit material or Displace with a material.
+- **Pattern picker:** "Materials (node)" lists every material, for pattern layers, text fill and the texture brush.
+- **Ctrl+K:**
+  - "Go to Material", "New empty material", "New empty effect map", "Export material maps", "Add material to the canvas as a layer";
+  - "New material: …" for each of the 90 materials, and "New effect map: …" for each of the 8 maps;
+  - "Add node: …" while the Material tab is open.
 
 ## Roadmap entry (paste into ROADMAP.md)
 
 ```
-- [x] M28 Material workspace (tab 7, Material Maker style): node graph (54 nodes: generators, filters, blends,
-  height/normal, TypeLab sources Text / Layer / Document / Pattern / Image), 90 starter materials in 10 groups,
-  3D preview (sphere / cube / cylinder / plane, GGX, parallax) + 2D tiled / per-channel preview, PBR export
-  (albedo, normal GL/DX, roughness, metallic, AO, height, emission, opacity, ORM) as zip, material → image layer;
-  graphs in doc.materials (undo, autosave, .typelab); own WebGL2 context, RGBA16F + REPEAT, hash cache
+- [x] M28 Material workspace (tab 7, Material Maker style) + effect maps: node graph editor shared by two graph kinds.
+  Materials: 54 GPU nodes + 313 TypeLab effects/filters as seamless material nodes (3×3 wrap), 90 starter materials,
+  3D (sphere/cube/cylinder/plane, GGX, parallax) + 2D preview, PBR zip export (albedo, normal GL/DX, roughness,
+  metallic, AO, height, emission, opacity, ORM), material → layer / pattern layer / text fill / texture brush,
+  "Material" effect (relief from the real normal map). Effect maps: every TL.fx effect/filter as a node with an optional
+  mask, dither, 27 blends, masks, layers, document, patterns, materials, tiled generators; one "Effect map" entry in
+  any stack; map chain == list (pixel-identical); 8 starter maps. Graphs in doc.materials (undo, autosave, .typelab).
 ```
 
 ## Known limits and next steps
 
-- **Exports are 8-bit.** Height in particular would benefit from 16-bit PNG, which needs a PNG encoder. The textures are already 16-bit float, so `M.toCanvas` is the only place to change.
-- **Pattern node tiles must be square.** Non-square TypeLab tiles (Tribal Hearts) get stretched into a square, which keeps them seamless.
-- **Rotation in Transform** is seamless only at multiples of 90°. That is noted in the node help.
-- **Not done yet:**
-  - node groups and subgraphs, comment frames, SDF nodes;
-  - a curve-editor widget (Curve uses 5 sliders for now);
-  - multi-stop gradients beyond 5;
-  - "use material as a texture fill or Texture filter" by registering each material as a `TL.patterns` generator `mat-<id>`;
-  - importing Material Maker `.mmg` nodes.
-- **Performance:**
-  - Each node renders a full-size texture, and a node that only works per pixel could instead be fused into the next node's shader (Material Maker does this).
-  - Preview runs at ≤1024 px, or 256 px while dragging. The full size is used only for export.
+- **Exports are 8-bit PNG.** Height would benefit from 16-bit; the engine is float internally, so only `M.toCanvas` needs to change.
+- **Effect maps don't nest.** A map inside a map, or inside a Document or Layer node, passes its input through, so nothing can loop.
+- **In normal canvas renders, nodes that depend on the input re-run** whenever their layer re-renders. TypeLab's layer cache limits how often that happens. Cross-render caching is used for input-independent branches and in the Material-tab preview.
+- **"TypeLab FX" material nodes run on the CPU** at 3× the tile size. Above roughly 1365 px per tile, `TL.fx.apply` downscales to the GPU limit. Slow filters show their quick version first, then refine.
+- **The Pattern node in materials stretches non-square tiles** into a square, which keeps them seamless.
+- **Not built yet:** node groups and comment frames, a curve-editor widget (5 sliders for now), SDF nodes, importing Material Maker `.mmg` files.
