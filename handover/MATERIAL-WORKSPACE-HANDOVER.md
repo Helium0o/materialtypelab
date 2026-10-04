@@ -1,5 +1,13 @@
 # Handover: add a "Material" workspace to TypeLab
 
+> **Update: the code now exists.** It is in [`../typelab-material/`](../typelab-material/README.md), built and tested against the TypeLab tree the user sent.
+> - **Start with [`typelab-material/INSTALL.md`](../typelab-material/INSTALL.md):** copy 9 files and add 9 lines to `index.html`.
+> - It includes 54 nodes, 90 starter materials, 3D and 2D previews, zip export, and "Add as a layer".
+> - Read the plan below for background only. The implementation differs from it in three places:
+>   1. **Own WebGL2 context**, not `TL.gl`'s. That isolates GL state, and it avoids editing `G.tex`.
+>   2. **The library sits inside the view, left of the graph.** It is not a dock panel, so `dock.js` is untouched. Layers and History are hidden by CSS, and an empty dock collapses to 0 width.
+>   3. **Nothing in shell, tools, state or dock is edited.** The workspace wraps `UI.setMode`, `UI.refresh`, `UI.buildTopbar` and `TL.migrate`, and uses a capture-phase key guard.
+
 **For:** the session working on TypeLab (Electron app, `app/js/...`, ROADMAP at M27).
 **From:** a planning session that read about half of the TypeLab source (the files listed in §9). It did not run the app.
 **Ask:** add a new top-bar tab, **Material**, that works like [Material Maker](https://github.com/RodZill4/material-maker):

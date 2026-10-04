@@ -1,0 +1,32 @@
+--- a/app/index.html
++++ b/app/index.html
+@@ -5,6 +5,7 @@
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>TypeLab</title>
+   <link rel="stylesheet" href="css/style.css">
++  <link rel="stylesheet" href="css/material.css">
+ </head>
+ <body>
+   <div id="app">
+@@ -60,6 +61,13 @@
+   <script src="js/mockup.js"></script>
+   <script src="js/batch.js"></script>
+   <script src="js/autosave.js"></script>
++  <script src="js/material/mat-glsl.js"></script>
++  <script src="js/material/mat-core.js"></script>
++  <script src="js/material/mat-nodes.js"></script>
++  <script src="js/material/mat-nodes-typelab.js"></script>
++  <script src="js/material/mat-presets.js"></script>
++  <script src="js/material/mat-preview3d.js"></script>
++  <script src="js/material/mat-graph.js"></script>
+   <script src="js/view.js"></script>
+   <script src="js/tools.js"></script>
+   <script src="js/ui/kit.js"></script>
+@@ -75,6 +83,7 @@
+   <script src="js/ui/mode-paint.js"></script>
+   <script src="js/ui/mode-export.js"></script>
+   <script src="js/ui/export-preview.js"></script>
++  <script src="js/ui/mode-material.js"></script>
+   <script src="js/dialogs.js"></script>
+   <script src="js/ui/colortools.js"></script>
+   <script src="js/ui/variants.js"></script>
